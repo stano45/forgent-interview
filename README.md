@@ -93,13 +93,3 @@ curl http://localhost:8000/files
 * 401 / Anthropic errors: ensure `ANTHROPIC_API_KEY` is set in the environment visible to the backend container.
 * Changes not reflecting: container may be caching deps; restart with `docker compose up --build`.
 * Port in use: adjust `ports` mapping in `docker-compose.yml`.
-
----
-## 8. Next Ideas (not implemented)
-* Basic vector indexing per document
-* Auth & per-user document segregation
-* Richer UI for multi-turn chat
-* Caching / dedupe of model calls
-
----
-Feel free to extend or trim features as needed for the interview scenario.
