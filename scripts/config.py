@@ -9,11 +9,12 @@ class Config:
     max_output_tokens: int
     temperature: float
 
+
 def load_config() -> Config:
     load_dotenv()
     return Config(
         api_key=os.getenv("ANTHROPIC_API_KEY", ""),
-        model=os.getenv("MODEL", ""),
-        max_output_tokens=int(os.getenv("MAX_OUTPUT_TOKENS", "")),
-        temperature=float(os.getenv("TEMPERATURE", "")),
+        model=os.getenv("ANTHROPIC_MODEL", "claude-3-5-sonnet-latest"),
+        max_output_tokens=int(os.getenv("ANTHROPIC_MAX_TOKENS", "1024")),
+        temperature=float(os.getenv("ANTHROPIC_TEMP", "0")),
     )
