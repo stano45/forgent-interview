@@ -3,15 +3,22 @@
 import React, { useState, useRef } from "react";
 
 type StreamItem =
+  | { type: "start" }
   | { type: "question_result"; id: string; question: string; answer: string; raw: string }
   | { type: "condition_result"; id: string; condition: string; result: boolean; raw: string }
+  | { type: "error"; message: string }
   | { type: "done" };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
+const DEFAULT_QUESTIONS = [
+  'In welcher Form sind die Angebote/Teilnahmeanträge einzureichen?',
+  'Wann ist die Frist für die Einreichung von Bieterfragen?',
+].join("\n");
+
 export default function Home() {
   const [uploading, setUploading] = useState(false);
-  const [questionInputs, setQuestionInputs] = useState<string>("");
+  const [questionInputs, setQuestionInputs] = useState<string>(DEFAULT_QUESTIONS);
   const [conditionInputs, setConditionInputs] = useState<string>("");
   const [streamItems, setStreamItems] = useState<StreamItem[]>([]);
   const [loadingStream, setLoadingStream] = useState(false);
@@ -78,10 +85,14 @@ export default function Home() {
             try {
               const obj: StreamItem = JSON.parse(line);
               setStreamItems(prev => [...prev, obj]);
+              if (obj.type === "error") {
+                console.error("Stream error:", obj.message);
+              }
               if (obj.type === "done") {
                 setLoadingStream(false);
                 // Clear form for a fresh start each time
-                setQuestionInputs("");
+                // Restore default questions so user can quickly run again
+                setQuestionInputs(DEFAULT_QUESTIONS);
                 setConditionInputs("");
               }
             } catch (e) {
