@@ -1,48 +1,108 @@
-# Forgent Interview API
+# Forgent Interview Project
 
-Simple FastAPI service for document Q&A using Anthropic's Claude with file uploads.
+Full‑stack demo for document Q&A: a FastAPI backend that ingests PDF files and queries them using Anthropic Claude, plus a Next.js (React) UI for uploading documents and asking questions/conditions. Runs locally with Docker.
 
-## Setup
+---
+## 1. Prerequisites
+You need:
+1. Docker (https://docs.docker.com/get-docker/)
+2. Docker Compose (comes bundled with modern Docker Desktop)
+3. An Anthropic API key (set as an environment variable before starting or inject via Docker)
 
+Environment variables (minimal – must match `api/config.py`):
+```
+ANTHROPIC_API_KEY=your-key-here          # Required
+ANTHROPIC_MODEL=claude-3-5-sonnet-latest # Model name
+ANTHROPIC_MAX_TOKENS=1024                # Max output tokens per response
+ANTHROPIC_TEMP=0                         # Sampling temperature
+```
+You can place these in an `.env` file at repo root (Docker Compose automatically loads it) or export them in your shell.
+
+---
+## 2. Run (one command)
+Build and start both backend (FastAPI) and frontend (Next.js):
 ```bash
-cd api
-pip install -r requirements.txt
+docker compose up --build
+```
+First build can take a minute. Subsequent runs can omit `--build`.
+
+When containers are healthy:
+* Frontend UI: http://localhost:3000
+* Backend API (direct): http://localhost:8000/docs (Swagger UI)
+
+---
+## 3. Use the App
+1. Open http://localhost:3000
+2. Upload one or more PDF files
+3. Enter questions and optional conditions
+4. Submit and view streamed responses
+
+The backend streams JSONL chunks; the UI progressively renders them.
+
+---
+## 4. Project Structure (high level)
+```
+docker-compose.yml   # Orchestrates backend + frontend services
+api/                 # FastAPI service (file upload, Q&A endpoints, Claude client)
+  app.py             # FastAPI app & routes
+  anthropic_client.py# Thin Anthropic API wrapper
+  database.py        # Simple SQLite (files + metadata)
+  uploaded_files/    # Stored PDF uploads
+frontend/            # Next.js 15 + Tailwind UI
+  src/app/           # App router pages & layout
+  src/components/    # Reusable UI components (buttons, inputs, progress, toast)
+scripts/             # Standalone Python scripts (CLI experimentation)
+data/                # Example PDF documents
 ```
 
-Set environment variables:
+---
+## 5. Implementation Notes (brief)
+Backend:
+* FastAPI handles `POST /upload` (multipart PDFs) and `POST /ask` (JSON body with questions & conditions).
+* Files saved to `api/uploaded_files/` and indexed minimally (filenames + IDs) in SQLite.
+* Question answering delegates to Anthropic Claude (model configurable via env vars) with a simple prompt template.
+* Responses streamed as JSON lines so the UI can show incremental progress.
+
+Frontend:
+* Next.js (App Router) with lightweight components (no heavy state management) and Tailwind-based styles.
+* Uploads via fetch multipart form; listens to streaming response using `ReadableStream`.
+* Presents progress and final structured answers.
+
+Dev Experience:
+* Live code reload via mounted volumes in both services.
+* Minimal dependencies to keep build fast.
+
+---
+## 6. Direct API Examples (optional)
+Upload files:
 ```bash
-export ANTHROPIC_API_KEY="your-key-here"
-export MODEL="claude-3-5-sonnet-latest"
-export MAX_OUTPUT_TOKENS="1024" 
-export TEMPERATURE="0"
+curl -F "files=@file1.pdf" -F "files=@file2.pdf" http://localhost:8000/upload
 ```
 
-## Run
-
-```bash
-uvicorn app:app --reload
-```
-
-API runs on http://127.0.0.1:8000
-
-## Usage
-
-**Upload files:**
-```bash
-curl -F "files=@file1.pdf" -F "files=@file2.pdf" http://127.0.0.1:8000/upload
-```
-Returns file IDs.
-
-**Ask questions:**
+Ask questions (streaming):
 ```bash
 curl -N -H "Content-Type: application/json" \
   -d '{"questions":["What is the deadline?"],"conditions":["Is deadline before Dec 31?"],"file_ids":["uuid1","uuid2"]}' \
-  http://127.0.0.1:8000/ask
+  http://localhost:8000/ask
 ```
 
-**List files:**
+List uploaded files:
 ```bash
-curl http://127.0.0.1:8000/files
+curl http://localhost:8000/files
 ```
 
-Streams JSONL responses. Omit `file_ids` to use all uploaded files.
+---
+## 7. Troubleshooting
+* 401 / Anthropic errors: ensure `ANTHROPIC_API_KEY` is set in the environment visible to the backend container.
+* Changes not reflecting: container may be caching deps; restart with `docker compose up --build`.
+* Port in use: adjust `ports` mapping in `docker-compose.yml`.
+
+---
+## 8. Next Ideas (not implemented)
+* Basic vector indexing per document
+* Auth & per-user document segregation
+* Richer UI for multi-turn chat
+* Caching / dedupe of model calls
+
+---
+Feel free to extend or trim features as needed for the interview scenario.

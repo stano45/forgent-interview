@@ -35,8 +35,8 @@ export default function Home() {
   }
 
   const [uploading, setUploading] = useState(false);
-  const [questions, setQuestions] = useState<QAEntry[]>(() => DEFAULT_QUESTION_TEXTS.map((t,i)=>({id:`q${i+1}`, text:t})));
-  const [conditions, setConditions] = useState<QAEntry[]>(() => DEFAULT_CONDITION_TEXTS.map((t,i)=>({id:`c${i+1}`, text:t})));
+  const [questions, setQuestions] = useState<QAEntry[]>(() => DEFAULT_QUESTION_TEXTS.map((t, i) => ({ id: `q${i + 1}`, text: t })));
+  const [conditions, setConditions] = useState<QAEntry[]>(() => DEFAULT_CONDITION_TEXTS.map((t, i) => ({ id: `c${i + 1}`, text: t })));
   const [newQuestion, setNewQuestion] = useState("");
   const [newCondition, setNewCondition] = useState("");
   const [loadingStream, setLoadingStream] = useState(false);
@@ -67,15 +67,15 @@ export default function Home() {
     setConditions(cs => [...cs, { id: nextId("c", cs), text }]);
     setNewCondition("");
   }
-  function removeQuestion(id: string){
-    setQuestions(qs=>qs.filter(q=>q.id!==id));
+  function removeQuestion(id: string) {
+    setQuestions(qs => qs.filter(q => q.id !== id));
     setQuestionStatuses(prev => {
       const { [id]: _, ...rest } = prev;
       return rest;
     });
   }
-  function removeCondition(id: string){
-    setConditions(cs=>cs.filter(c=>c.id!==id));
+  function removeCondition(id: string) {
+    setConditions(cs => cs.filter(c => c.id !== id));
     setConditionStatuses(prev => {
       const { [id]: _, ...rest } = prev;
       return rest;
@@ -103,11 +103,11 @@ export default function Home() {
     } catch (err) {
       toast.error(`Upload fehlgeschlagen: ${(err as Error).message}`);
     } finally {
-      setTimeout(()=> setUploadProgress(null), 600);
+      setTimeout(() => setUploadProgress(null), 600);
       setUploading(false);
     }
   }
-  
+
   const removeFile = (id: string) => {
     setFiles(prev => prev.filter(file => file.id !== id));
   }
@@ -145,8 +145,8 @@ export default function Home() {
     abortRef.current = controller;
     try {
       const body = JSON.stringify({
-        questions: questions.map(q=>({id:q.id, text:q.text})),
-        conditions: conditions.map(c=>({id:c.id, text:c.text})),
+        questions: questions.map(q => ({ id: q.id, text: q.text })),
+        conditions: conditions.map(c => ({ id: c.id, text: c.text })),
         file_ids: files.map(file => file.id),
       });
       const res = await fetch(`${API_BASE}/ask`, {
@@ -187,7 +187,7 @@ export default function Home() {
               toast.success("Analyse erfolgreich abgeschlossen");
               setLoadingStream(false);
             }
-          } catch {}
+          } catch { }
         }
       }
     } catch (err) {
@@ -201,20 +201,20 @@ export default function Home() {
     }
   }
 
-  function abortStream(){
+  function abortStream() {
     abortRef.current?.abort();
     setLoadingStream(false);
   }
 
-  useEffect(()=>{
-    function handler(e: KeyboardEvent){
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !loadingStream){
+  useEffect(() => {
+    function handler(e: KeyboardEvent) {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !loadingStream) {
         const form = document.getElementById("ask-form");
-        form?.dispatchEvent(new Event("submit", { cancelable:true, bubbles:true }));
+        form?.dispatchEvent(new Event("submit", { cancelable: true, bubbles: true }));
       }
     }
     window.addEventListener("keydown", handler);
-    return ()=> window.removeEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
   }, [loadingStream]);
 
   return (
@@ -237,7 +237,7 @@ export default function Home() {
             </CardHeader>
             <CardContent className="space-y-3">
               {/* Drag and drop area */}
-              <div 
+              <div
                 className={cn(
                   "border-2 border-dashed rounded-lg p-6 text-center transition-colors",
                   uploading ? "bg-muted cursor-not-allowed" : "hover:bg-accent/50 cursor-pointer"
@@ -260,12 +260,12 @@ export default function Home() {
                   }
                 }}
               >
-                <input 
-                  id="file-upload" 
-                  name="files" 
-                  type="file" 
-                  multiple 
-                  disabled={uploading} 
+                <input
+                  id="file-upload"
+                  name="files"
+                  type="file"
+                  multiple
+                  disabled={uploading}
                   className="hidden"
                   onChange={handleFileChange}
                 />
@@ -289,14 +289,14 @@ export default function Home() {
                   </div>
                 </div>
               </div>
-              
+
               {uploadProgress !== null && (
                 <div className="space-y-1">
                   <Progress value={uploadProgress} />
                   <p className="text-[10px] text-muted-foreground">{uploadProgress < 100 ? "Lade hoch..." : "Abgeschlossen"}</p>
                 </div>
               )}
-              
+
               {files.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-xs font-medium">{files.length} PDF-Datei{files.length !== 1 ? 'en' : ''} bereit für die Analyse</p>
@@ -304,8 +304,8 @@ export default function Home() {
                     {files.map(file => (
                       <div key={file.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-accent/20 text-sm">
                         <div className="flex items-center gap-2 overflow-hidden">
-                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
-                               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
                             <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
                             <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path>
                             <path d="M9 9h1"></path>
@@ -314,15 +314,15 @@ export default function Home() {
                           </svg>
                           <span className="truncate" title={file.name}>{file.name}</span>
                         </div>
-                        <Button 
-                          size="sm" 
-                          variant="ghost" 
-                          onClick={() => removeFile(file.id)} 
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => removeFile(file.id)}
                           className="h-6 w-6 p-0 rounded-full"
                           aria-label="Datei entfernen"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" 
-                               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                             <line x1="18" y1="6" x2="6" y2="18"></line>
                             <line x1="6" y1="6" x2="18" y2="18"></line>
                           </svg>
@@ -341,7 +341,7 @@ export default function Home() {
                 <div className="hidden sm:flex h-7 w-7 items-center justify-center rounded-full border bg-background text-xs">2</div>
                 <div>
                   <CardTitle>Fragen</CardTitle>
-                  <CardDescription>Hinzufügen</CardDescription>
+                  <CardDescription>Offene Fragen hinzufügen, die mit Text beantwortet werden</CardDescription>
                 </div>
               </div>
             </CardHeader>
@@ -350,8 +350,8 @@ export default function Home() {
                 <Input
                   placeholder="Neue Frage eingeben..."
                   value={newQuestion}
-                  onChange={e=>setNewQuestion(e.target.value)}
-                  onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addQuestion(); } }}
+                  onChange={e => setNewQuestion(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addQuestion(); } }}
                 />
                 <Button type="button" onClick={addQuestion} disabled={!newQuestion.trim()}>Hinzufügen</Button>
               </div>
@@ -362,7 +362,7 @@ export default function Home() {
                     <li key={q.id} className="rounded-md border p-3 bg-accent/30">
                       <div className="flex items-start gap-2">
                         <span className="flex-1 text-sm leading-snug">{q.text}</span>
-                        <Button size="sm" variant="ghost" onClick={()=>removeQuestion(q.id)} aria-label="Entfernen">✕</Button>
+                        <Button size="sm" variant="ghost" onClick={() => removeQuestion(q.id)} aria-label="Entfernen">✕</Button>
                       </div>
                       {loadingStream && status && !status.received && (
                         <div className="mt-2 space-y-1.5">
@@ -379,7 +379,7 @@ export default function Home() {
                     </li>
                   );
                 })}
-                {questions.length===0 && <p className="text-xs text-muted-foreground">Noch keine Fragen.</p>}
+                {questions.length === 0 && <p className="text-xs text-muted-foreground">Noch keine Fragen.</p>}
               </ul>
             </CardContent>
           </Card>
@@ -399,8 +399,8 @@ export default function Home() {
                 <Input
                   placeholder="Neue Bedingung..."
                   value={newCondition}
-                  onChange={e=>setNewCondition(e.target.value)}
-                  onKeyDown={e=>{ if(e.key==='Enter'){ e.preventDefault(); addCondition(); } }}
+                  onChange={e => setNewCondition(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCondition(); } }}
                 />
                 <Button type="button" onClick={addCondition} disabled={!newCondition.trim()}>Hinzufügen</Button>
               </div>
@@ -411,7 +411,7 @@ export default function Home() {
                     <li key={c.id} className="rounded-md border p-3 bg-accent/30">
                       <div className="flex items-start gap-2">
                         <span className="flex-1 text-sm leading-snug">{c.text}</span>
-                        <Button size="sm" variant="ghost" onClick={()=>removeCondition(c.id)} aria-label="Entfernen">✕</Button>
+                        <Button size="sm" variant="ghost" onClick={() => removeCondition(c.id)} aria-label="Entfernen">✕</Button>
                       </div>
                       {loadingStream && status && !status.received && (
                         <div className="mt-2 space-y-1">
@@ -430,15 +430,15 @@ export default function Home() {
                     </li>
                   );
                 })}
-                {conditions.length===0 && <p className="text-xs text-muted-foreground">Keine Bedingungen definiert.</p>}
+                {conditions.length === 0 && <p className="text-xs text-muted-foreground">Keine Bedingungen definiert.</p>}
               </ul>
             </CardContent>
           </Card>
 
           <Card id="interaction" className={cn(
-              "sticky bottom-4 pl-0 sm:pl-8 shadow-lg transition-colors",
-              loadingStream && "border-primary/50"
-            )}>
+            "sticky bottom-4 pl-0 sm:pl-8 shadow-lg transition-colors",
+            loadingStream && "border-primary/50"
+          )}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-3">
                 <div className={cn(
@@ -446,9 +446,9 @@ export default function Home() {
                   loadingStream ? "bg-primary/10 border-primary text-primary" : "bg-background"
                 )}>
                   {loadingStream ? (
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" 
-                        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                        className="animate-pulse">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+                      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                      className="animate-pulse">
                       <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
                       <path d="M12 9v4"></path>
                       <path d="M12 17h.01"></path>
@@ -495,7 +495,7 @@ export default function Home() {
         </div>
       </div>
 
-      <footer className="pt-8 pb-4 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} Forgent • Cmd+Enter zum Starten der Analyse</footer>
+      <footer className="pt-8 pb-4 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} • Cmd+Enter zum Starten der Analyse</footer>
     </main>
   );
 }
