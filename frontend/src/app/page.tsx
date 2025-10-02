@@ -22,6 +22,7 @@ export default function Home() {
   const [conditionInputs, setConditionInputs] = useState<string>("");
   const [streamItems, setStreamItems] = useState<StreamItem[]>([]);
   const [loadingStream, setLoadingStream] = useState(false);
+  const [fileIds, setFileIds] = useState<string[]>([]);
   const abortRef = useRef<AbortController | null>(null);
 
   async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
@@ -35,9 +36,13 @@ export default function Home() {
     try {
       const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: formData });
       if (!res.ok) throw new Error(await res.text());
+      const data = await res.json();
+      // Extract file IDs from the response and add to state
+      const uploadedIds = data.files.map((f: { id: string; filename: string }) => f.id);
+      setFileIds(prev => [...prev, ...uploadedIds]);
       input.value = "";
       // Brief visual feedback
-      alert("Upload erfolgreich");
+      alert(`Upload erfolgreich: ${uploadedIds.length} Datei(en) hochgeladen`);
     } catch (err) {
       alert("Upload failed: " + (err as Error).message);
     } finally {
@@ -53,10 +58,17 @@ export default function Home() {
     ev.preventDefault();
     const questions = parseMultiline(questionInputs).map((text, i) => ({ id: `q${i+1}`, text }));
     const conditions = parseMultiline(conditionInputs).map((text, i) => ({ id: `c${i+1}`, text }));
+
     if (questions.length === 0 && conditions.length === 0) {
       alert("Add at least one question or condition.");
       return;
     }
+
+    if (fileIds.length === 0) {
+      alert("Please upload files first or provide file IDs.");
+      return;
+    }
+
     setStreamItems([]);
     setLoadingStream(true);
     const controller = new AbortController();
@@ -65,8 +77,7 @@ export default function Home() {
       const res = await fetch(`${API_BASE}/ask`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // No file_ids provided => backend will use all stored files implicitly
-        body: JSON.stringify({ questions, conditions }),
+        body: JSON.stringify({ questions, conditions, file_ids: fileIds }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error(await res.text());
@@ -81,29 +92,27 @@ export default function Home() {
         while ((idx = buffered.indexOf("\n")) !== -1) {
           const line = buffered.slice(0, idx).trim();
           buffered = buffered.slice(idx + 1);
-            if (!line) continue;
-            try {
-              const obj: StreamItem = JSON.parse(line);
-              setStreamItems(prev => [...prev, obj]);
-              if (obj.type === "error") {
-                console.error("Stream error:", obj.message);
-              }
-              if (obj.type === "done") {
-                setLoadingStream(false);
-                // Clear form for a fresh start each time
-                // Restore default questions so user can quickly run again
-                setQuestionInputs(DEFAULT_QUESTIONS);
-                setConditionInputs("");
-              }
-            } catch (e) {
-              console.warn("Bad line", line);
+          if (!line) continue;
+          try {
+            const obj: StreamItem = JSON.parse(line);
+            setStreamItems(prev => [...prev, obj]);
+            if (obj.type === "error") {
+              console.error("Stream error:", obj.message);
             }
+            if (obj.type === "done") {
+              setLoadingStream(false);
+              setQuestionInputs(DEFAULT_QUESTIONS);
+              setConditionInputs("");
+            }
+          } catch (e) {
+            console.warn("Bad line", line);
+          }
         }
       }
     } catch (err) {
-      if ((err as any).name !== "AbortError") {
-        alert("Stream failed: " + (err as Error).message);
-      }
+      console.error("Request failed:", err);
+      alert("Request failed: " + (err as Error).message);
+    } finally {
       setLoadingStream(false);
     }
   }
@@ -117,12 +126,32 @@ export default function Home() {
     <div className="min-h-screen p-6 space-y-8 max-w-6xl mx-auto">
       <h1 className="text-2xl font-semibold">Forgent Checklist Tester</h1>
       <section className="space-y-4">
-        <h2 className="text-lg font-medium">1. Dokumente hochladen (optional)</h2>
+        <h2 className="text-lg font-medium">1. Dokumente hochladen</h2>
         <form onSubmit={handleUpload} className="flex flex-col gap-2 md:flex-row md:items-center">
           <input name="files" type="file" multiple className="border p-2 rounded" />
           <button disabled={uploading} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50">{uploading ? "Uploading..." : "Upload"}</button>
         </form>
-        <p className="text-xs text-gray-500">Beim Anfragen werden automatisch alle bisher gespeicherten Dateien berücksichtigt (nicht gelistet).</p>
+        {fileIds.length > 0 && (
+          <div className="mt-2">
+            <h3 className="text-sm font-medium mb-1">Hochgeladene Dateien (IDs):</h3>
+            <div className="flex flex-wrap gap-2">
+              {fileIds.map((id) => (
+                <div key={id} className="bg-blue-100 px-2 py-1 rounded text-xs flex items-center gap-2">
+                  <span className="font-mono">{id}</span>
+                  <button
+                    type="button"
+                    onClick={() => setFileIds(prev => prev.filter(fid => fid !== id))}
+                    className="text-red-600 hover:text-red-800"
+                    title="Remove"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <p className="text-xs text-gray-500">Die hochgeladenen Dateien werden bei den Anfragen verwendet.</p>
       </section>
 
       <section className="space-y-4">
@@ -154,16 +183,6 @@ export default function Home() {
                 <div>
                   <div className="font-semibold">Frage: {item.question}</div>
                   <div className="mt-1">Antwort: <span className="font-medium">{item.answer}</span></div>
-                  <details className="mt-1">
-                    <summary className="cursor-pointer text-xs text-gray-600">Raw JSON</summary>
-                    <pre className="text-xs whitespace-pre-wrap break-words">{item.raw}</pre>
-                  </details>
-                </div>
-              )}
-              {item.type === 'condition_result' && (
-                <div>
-                  <div className="font-semibold">Bedingung: {item.condition}</div>
-                  <div className="mt-1">Result: <span className={`font-medium ${item.result ? 'text-green-600' : 'text-red-600'}`}>{String(item.result)}</span></div>
                   <details className="mt-1">
                     <summary className="cursor-pointer text-xs text-gray-600">Raw JSON</summary>
                     <pre className="text-xs whitespace-pre-wrap break-words">{item.raw}</pre>

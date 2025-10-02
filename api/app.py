@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from typing import List, AsyncGenerator
 import json, asyncio, os
+import logging
 
 from config import load_config
 from anthropic_client import AnthropicClient
@@ -15,6 +16,10 @@ from prompts import (
 from database import insert_file, get_file_paths, fetch_all_files, get_file_paths_by_ids
 
 app = FastAPI(title="Forgent Checklist API", version="0.1.0")
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Allow local frontend dev (Next.js on port 3000). Can override with comma separated ALLOWED_ORIGINS env.
 allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
@@ -35,54 +40,42 @@ app.add_middleware(
 
 @app.post("/upload")
 async def upload(files: List[UploadFile] = File(...)):
+    logger.info("Received upload request with %d files", len(files))
     stored = []
     for uf in files:
+        logger.info("Processing file: %s", uf.filename)
         data = await uf.read()
         if not data:
+            logger.error("Empty file: %s", uf.filename)
             raise HTTPException(status_code=400, detail=f"Empty file: {uf.filename}")
         file_id = insert_file(uf.filename, data)
+        logger.info("File %s stored with ID: %s", uf.filename, file_id)
         stored.append({"id": file_id, "filename": uf.filename})
+    logger.info("Successfully stored %d files", len(stored))
     return {"files": stored, "count": len(stored)}
 
 @app.post("/ask")
 async def ask(payload: dict):
-    """Submit questions/conditions and stream structured JSONL results.
-
-    Request body example:
-    {
-        "questions": [
-            {"id": "q1", "text": "What is...?"},
-            {"id": "q2", "text": "How to...?"}
-        ],
-        "conditions": [
-            {"id": "c1", "text": "Is the deadline before...?"},
-            {"id": "c2", "text": "Are electronic submissions allowed?"}
-        ],
-        "file_ids": ["uuid1", "uuid2"]
-    }
-    """
+    logger.info("Received ask request with payload: %s", payload)
     questions: List[dict] = payload.get("questions") or []
     conditions: List[dict] = payload.get("conditions") or []
     file_ids: List[str] = payload.get("file_ids") or []
-    
-    for q in questions:
-        if not isinstance(q, dict) or "id" not in q or "text" not in q:
-            raise HTTPException(status_code=400, detail="Each question must have 'id' and 'text' fields")
-    
-    for c in conditions:
-        if not isinstance(c, dict) or "id" not in c or "text" not in c:
-            raise HTTPException(status_code=400, detail="Each condition must have 'id' and 'text' fields")
-    
-    if not questions and not conditions:
-        raise HTTPException(status_code=400, detail="Provide at least one question or condition")
-    
-    if not file_ids:
-        paths = get_file_paths()
-    else:
-        paths = get_file_paths_by_ids(file_ids)
-        if not paths:
-            raise HTTPException(status_code=400, detail="No valid files found for provided file_ids")
 
+    if not questions and not conditions:
+        logger.error("No questions or conditions provided")
+        raise HTTPException(status_code=400, detail="Provide at least one question or condition")
+
+    if not file_ids:
+        logger.error("No file IDs provided")
+        raise HTTPException(status_code=400, detail="Provide file IDs for processing")
+
+    logger.info("Fetching file paths for provided file IDs")
+    paths = get_file_paths_by_ids(file_ids)
+    if not paths:
+        logger.error("No valid files found for provided file_ids")
+        raise HTTPException(status_code=400, detail="No valid files found for provided file_ids")
+
+    logger.info("Initializing Anthropic client")
     config = load_config()
     system_prompt = DEFAULT_SYSTEM + "\n" + JSON_ENFORCEMENT_HINT
     client = AnthropicClient(
@@ -94,8 +87,10 @@ async def ask(payload: dict):
     )
 
     async def stream() -> AsyncGenerator[bytes, None]:
+        logger.info("Uploading files to Anthropic")
         anthropic_file_ids = client.upload_files(paths)
         for q in questions:
+            logger.info("Processing question: %s", q["text"])
             prompt = build_question_prompt(q["text"]) + "\nNur das JSON Objekt. Keine Erklärungen, KEINE Backticks."
             res = client.ask_with_files([{"text": prompt}], anthropic_file_ids)
             raw_txt = extract_text_blocks(res)
@@ -109,6 +104,7 @@ async def ask(payload: dict):
             }, ensure_ascii=False).encode() + b"\n"
             await asyncio.sleep(0)
         for c in conditions:
+            logger.info("Processing condition: %s", c["text"])
             prompt = build_condition_prompt(c["text"]) + "\nNur das JSON Objekt. Keine Erklärungen, KEINE Backticks."
             res = client.ask_with_files([{"text": prompt}], anthropic_file_ids)
             raw_txt = extract_text_blocks(res)
@@ -121,6 +117,7 @@ async def ask(payload: dict):
                 "raw": raw_txt,
             }, ensure_ascii=False).encode() + b"\n"
             await asyncio.sleep(0)
+        logger.info("Streaming completed")
         yield b"{\"type\": \"done\"}\n"
 
     return StreamingResponse(stream(), media_type="application/jsonl")
@@ -170,10 +167,12 @@ def parse_condition_answer(raw: str) -> bool:
 
 @app.get("/health")
 async def health():
+    logger.info("Health check endpoint called")
     return {"status": "ok"}
 
 @app.get("/files")
 async def list_files():
-    """List all uploaded files with their IDs."""
+    logger.info("List files endpoint called")
     files = fetch_all_files()
+    logger.info("Fetched %d files", len(files))
     return {"files": [{"id": fid, "filename": fname} for fid, fname, _ in files]}
