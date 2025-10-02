@@ -1,12 +1,12 @@
 # Forgent Checklist
 
-Minimal Prototype for Tender Checklist (Anthropic API)
+Minimal Prototype for Tender Checklist (Anthropic API) - not used in the final full stack app
 
 ## Setup
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip3 install -r requirements.txt # alternatively use pip instead of pip3
+pip3 install -r requirements.txt
 cp .env.example .env        # add your API key
 ```
 
