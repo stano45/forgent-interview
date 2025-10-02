@@ -1,9 +1,8 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
@@ -30,13 +29,18 @@ const DEFAULT_CONDITION_TEXTS = [
 ];
 
 export default function Home() {
+  interface FileInfo {
+    id: string;
+    name: string;
+  }
+
   const [uploading, setUploading] = useState(false);
   const [questions, setQuestions] = useState<QAEntry[]>(() => DEFAULT_QUESTION_TEXTS.map((t,i)=>({id:`q${i+1}`, text:t})));
   const [conditions, setConditions] = useState<QAEntry[]>(() => DEFAULT_CONDITION_TEXTS.map((t,i)=>({id:`c${i+1}`, text:t})));
   const [newQuestion, setNewQuestion] = useState("");
   const [newCondition, setNewCondition] = useState("");
   const [loadingStream, setLoadingStream] = useState(false);
-  const [fileIds, setFileIds] = useState<string[]>([]);
+  const [files, setFiles] = useState<FileInfo[]>([]);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -78,28 +82,48 @@ export default function Home() {
     });
   }
 
-  async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const input = (e.currentTarget.elements.namedItem("files") as HTMLInputElement);
-    if (!input.files || input.files.length === 0) return;
+  const uploadFiles = async (fileList: FileList | File[]) => {
+    if (fileList.length === 0) return;
     const formData = new FormData();
-    [...input.files].forEach(f => formData.append("files", f));
+    const filesToUpload = [...fileList];
+    filesToUpload.forEach(f => formData.append("files", f));
     setUploading(true);
     setUploadProgress(5);
     try {
       const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: formData });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
-      const uploadedIds = data.files.map((f: { id: string }) => f.id);
-      setFileIds(prev => [...prev, ...uploadedIds]);
-      input.value = "";
+      const uploadedFiles = data.files.map((f: { id: string }, index: number) => ({
+        id: f.id,
+        name: filesToUpload[index].name
+      }));
+      setFiles(prev => [...prev, ...uploadedFiles]);
       setUploadProgress(100);
-      toast.success(`${uploadedIds.length} Datei(en) hochgeladen`);
+      toast.success(`${uploadedFiles.length} Datei${filesToUpload.length !== 1 ? 'en' : ''} hochgeladen`);
     } catch (err) {
       toast.error(`Upload fehlgeschlagen: ${(err as Error).message}`);
     } finally {
       setTimeout(()=> setUploadProgress(null), 600);
       setUploading(false);
+    }
+  }
+  
+  const removeFile = (id: string) => {
+    setFiles(prev => prev.filter(file => file.id !== id));
+  }
+
+  async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const input = (e.currentTarget.elements.namedItem("files") as HTMLInputElement);
+    if (!input.files || input.files.length === 0) return;
+    await uploadFiles(input.files);
+    input.value = ""; // Clear the input after upload
+  }
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      uploadFiles(e.target.files);
+      e.target.value = ""; // Clear the input after upload
     }
   }
 
@@ -109,7 +133,7 @@ export default function Home() {
       toast.warning("Mindestens eine Frage oder Bedingung hinzufügen.");
       return;
     }
-    if (fileIds.length === 0) {
+    if (files.length === 0) {
       toast.warning("Bitte zuerst Dokumente hochladen.");
       return;
     }
@@ -123,7 +147,7 @@ export default function Home() {
       const body = JSON.stringify({
         questions: questions.map(q=>({id:q.id, text:q.text})),
         conditions: conditions.map(c=>({id:c.id, text:c.text})),
-        file_ids: fileIds,
+        file_ids: files.map(file => file.id),
       });
       const res = await fetch(`${API_BASE}/ask`, {
         method: "POST",
@@ -160,7 +184,7 @@ export default function Home() {
             }
             if (obj.type === "error") toast.error(obj.message);
             if (obj.type === "done") {
-              toast.success("Fertig");
+              toast.success("Analyse erfolgreich abgeschlossen");
               setLoadingStream(false);
             }
           } catch {}
@@ -212,20 +236,101 @@ export default function Home() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <form onSubmit={handleUpload} className="space-y-3">
-                <Input name="files" type="file" multiple disabled={uploading} />
-                {uploadProgress !== null && (
-                  <div className="space-y-1">
-                    <Progress value={uploadProgress} />
-                    <p className="text-[10px] text-muted-foreground">{uploadProgress < 100 ? "Lade hoch..." : "Fertig"}</p>
-                  </div>
+              {/* Drag and drop area */}
+              <div 
+                className={cn(
+                  "border-2 border-dashed rounded-lg p-6 text-center transition-colors",
+                  uploading ? "bg-muted cursor-not-allowed" : "hover:bg-accent/50 cursor-pointer"
                 )}
-                <Button disabled={uploading} className="w-full" type="submit">
-                  {uploading ? "Hochladen..." : "Upload"}
-                </Button>
-              </form>
-              {fileIds.length > 0 && (
-                <p className="text-xs text-muted-foreground">{fileIds.length} Datei(en) bereit</p>
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!uploading && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                    uploadFiles(e.dataTransfer.files);
+                  }
+                }}
+                onClick={() => {
+                  if (!uploading) {
+                    const fileInput = document.getElementById('file-upload') as HTMLInputElement;
+                    fileInput?.click();
+                  }
+                }}
+              >
+                <input 
+                  id="file-upload" 
+                  name="files" 
+                  type="file" 
+                  multiple 
+                  disabled={uploading} 
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+                <div className="flex flex-col items-center gap-2">
+                  <div className="h-10 w-10 rounded-full bg-muted/50 flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="17 8 12 3 7 8"></polyline>
+                      <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                  </div>
+                  <div className="text-sm">
+                    {uploading ? (
+                      <p>Wird hochgeladen...</p>
+                    ) : (
+                      <>
+                        <p className="font-medium">PDF-Dateien hier ablegen oder klicken zum Auswählen</p>
+                        <p className="text-xs text-muted-foreground mt-1">Unterstützt werden PDF-Dokumente</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              {uploadProgress !== null && (
+                <div className="space-y-1">
+                  <Progress value={uploadProgress} />
+                  <p className="text-[10px] text-muted-foreground">{uploadProgress < 100 ? "Lade hoch..." : "Abgeschlossen"}</p>
+                </div>
+              )}
+              
+              {files.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium">{files.length} PDF-Datei{files.length !== 1 ? 'en' : ''} bereit für die Analyse</p>
+                  <div className="space-y-2 max-h-40 overflow-y-auto">
+                    {files.map(file => (
+                      <div key={file.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-accent/20 text-sm">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" 
+                               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted-foreground">
+                            <path d="M14 3v4a1 1 0 0 0 1 1h4"></path>
+                            <path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <path d="M9 9h1"></path>
+                            <path d="M9 13h6"></path>
+                            <path d="M9 17h6"></path>
+                          </svg>
+                          <span className="truncate" title={file.name}>{file.name}</span>
+                        </div>
+                        <Button 
+                          size="sm" 
+                          variant="ghost" 
+                          onClick={() => removeFile(file.id)} 
+                          className="h-6 w-6 p-0 rounded-full"
+                          aria-label="Datei entfernen"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" 
+                               stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                          </svg>
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -256,7 +361,6 @@ export default function Home() {
                   return (
                     <li key={q.id} className="rounded-md border p-3 bg-accent/30">
                       <div className="flex items-start gap-2">
-                        <span className="font-mono text-[10px] pt-0.5 text-muted-foreground">{q.id}</span>
                         <span className="flex-1 text-sm leading-snug">{q.text}</span>
                         <Button size="sm" variant="ghost" onClick={()=>removeQuestion(q.id)} aria-label="Entfernen">✕</Button>
                       </div>
@@ -270,10 +374,6 @@ export default function Home() {
                         <div className="mt-2">
                           <span className="text-xs text-muted-foreground">Antwort</span>
                           <div className="font-medium text-primary">{status.answer}</div>
-                          <details className="mt-1">
-                            <summary className="cursor-pointer text-xs text-muted-foreground">Rohdaten</summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 text-[10px] whitespace-pre-wrap break-words">{status.raw}</pre>
-                          </details>
                         </div>
                       )}
                     </li>
@@ -282,7 +382,6 @@ export default function Home() {
                 {questions.length===0 && <p className="text-xs text-muted-foreground">Noch keine Fragen.</p>}
               </ul>
             </CardContent>
-            <CardFooter className="text-[10px] text-muted-foreground">Cmd+Enter sendet Anfrage</CardFooter>
           </Card>
 
           <Card className="pl-0 sm:pl-8">
@@ -311,7 +410,6 @@ export default function Home() {
                   return (
                     <li key={c.id} className="rounded-md border p-3 bg-accent/30">
                       <div className="flex items-start gap-2">
-                        <span className="font-mono text-[10px] pt-0.5 text-muted-foreground">{c.id}</span>
                         <span className="flex-1 text-sm leading-snug">{c.text}</span>
                         <Button size="sm" variant="ghost" onClick={()=>removeCondition(c.id)} aria-label="Entfernen">✕</Button>
                       </div>
@@ -327,10 +425,6 @@ export default function Home() {
                           ) : (
                             <span className="font-medium text-red-600">Nicht erfüllt</span>
                           )}
-                          <details className="pt-1">
-                            <summary className="cursor-pointer text-xs text-muted-foreground">Rohdaten</summary>
-                            <pre className="mt-1 max-h-40 overflow-auto rounded bg-muted p-2 text-[10px] whitespace-pre-wrap break-words">{status.raw}</pre>
-                          </details>
                         </div>
                       )}
                     </li>
@@ -346,18 +440,28 @@ export default function Home() {
               <div className="flex items-center gap-3">
                 <div className="hidden sm:flex h-7 w-7 items-center justify-center rounded-full border bg-background text-xs">4</div>
                 <div>
-                  <CardTitle>Anfrage senden</CardTitle>
-                  <CardDescription>Analyse starten</CardDescription>
+                  <CardTitle>Dokumente auswerten</CardTitle>
+                  <CardDescription>KI-gestützte Analyse durchführen</CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <form id="ask-form" onSubmit={handleAsk} className="flex flex-wrap gap-3">
-                <Button type="submit" disabled={loadingStream} className="min-w-40">
-                  {loadingStream ? "Läuft..." : "Anfrage starten"}
-                </Button>
-                {loadingStream && (
-                  <Button type="button" variant="outline" onClick={abortStream}>Abbrechen</Button>
+                {!loadingStream ? (
+                  <Button type="submit" disabled={loadingStream} className="min-w-40">
+                    Dokumente auswerten
+                  </Button>
+                ) : (
+                  <>
+                    <Button type="button" variant="outline" onClick={abortStream} className="min-w-40">
+                      Analyse abbrechen
+                    </Button>
+                  </>
+                )}
+                {Object.keys(questionStatuses).length > 0 && !loadingStream && (
+                  <Button type="submit" variant="outline">
+                    Erneut analysieren
+                  </Button>
                 )}
               </form>
             </CardContent>
@@ -365,7 +469,7 @@ export default function Home() {
         </div>
       </div>
 
-      <footer className="pt-8 pb-4 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} Forgent • Cmd+Enter zum Senden</footer>
+      <footer className="pt-8 pb-4 text-center text-xs text-muted-foreground">© {new Date().getFullYear()} Forgent • Cmd+Enter zum Starten der Analyse</footer>
     </main>
   );
 }
