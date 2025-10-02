@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+Minimal Next.js UI for testing the Forgent Checklist FastAPI backend.
 
-## Getting Started
+Features:
+* Upload multiple PDF (or other) documents to `/upload`.
+* List stored files (auto refresh + manual refresh).
+* Select subset of files (or none = all) to scope queries.
+* Enter multiple questions and/or conditions (one per line) and stream structured JSONL results from `/ask`.
+* Abort in-flight streaming request.
+* Inspect raw JSON lines returned by the backend.
 
-First, run the development server:
+## Running
 
+Backend (from `api/`): ensure FastAPI server is running on 127.0.0.1:8000
+
+Frontend:
 ```bash
+cd frontend
+npm install # first time
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+```
+Open http://localhost:3000
+
+If your backend runs elsewhere set env before start:
+```bash
+NEXT_PUBLIC_API_BASE=http://localhost:8001 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Code Overview
+* `src/app/page.tsx` – main UI (client component) with upload, selection, ask form, streaming parser.
+* Uses simple `fetch` with streaming reader (JSONL newline separated objects).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Notes
+The backend `/ask` endpoint returns newline-delimited JSON objects terminated by a `{ "type": "done" }` marker. The UI appends each parsed object to the results panel. Malformed lines are ignored but logged to console.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+This UI is intentionally minimal—no global state library, design system, or routing complexity—so it can be extended rapidly during development.

@@ -1,103 +1,176 @@
-import Image from "next/image";
+"use client";
+
+import React, { useState, useRef } from "react";
+
+type StreamItem =
+  | { type: "question_result"; id: string; question: string; answer: string; raw: string }
+  | { type: "condition_result"; id: string; condition: string; result: boolean; raw: string }
+  | { type: "done" };
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [uploading, setUploading] = useState(false);
+  const [questionInputs, setQuestionInputs] = useState<string>("");
+  const [conditionInputs, setConditionInputs] = useState<string>("");
+  const [streamItems, setStreamItems] = useState<StreamItem[]>([]);
+  const [loadingStream, setLoadingStream] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  async function handleUpload(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const input = form.elements.namedItem("files") as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    const formData = new FormData();
+    [...input.files].forEach(f => formData.append("files", f));
+    setUploading(true);
+    try {
+      const res = await fetch(`${API_BASE}/upload`, { method: "POST", body: formData });
+      if (!res.ok) throw new Error(await res.text());
+      input.value = "";
+      // Brief visual feedback
+      alert("Upload erfolgreich");
+    } catch (err) {
+      alert("Upload failed: " + (err as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function parseMultiline(input: string) {
+    return input.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  }
+
+  async function handleAsk(ev: React.FormEvent) {
+    ev.preventDefault();
+    const questions = parseMultiline(questionInputs).map((text, i) => ({ id: `q${i+1}`, text }));
+    const conditions = parseMultiline(conditionInputs).map((text, i) => ({ id: `c${i+1}`, text }));
+    if (questions.length === 0 && conditions.length === 0) {
+      alert("Add at least one question or condition.");
+      return;
+    }
+    setStreamItems([]);
+    setLoadingStream(true);
+    const controller = new AbortController();
+    abortRef.current = controller;
+    try {
+      const res = await fetch(`${API_BASE}/ask`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        // No file_ids provided => backend will use all stored files implicitly
+        body: JSON.stringify({ questions, conditions }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(await res.text());
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffered = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffered += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffered.indexOf("\n")) !== -1) {
+          const line = buffered.slice(0, idx).trim();
+          buffered = buffered.slice(idx + 1);
+            if (!line) continue;
+            try {
+              const obj: StreamItem = JSON.parse(line);
+              setStreamItems(prev => [...prev, obj]);
+              if (obj.type === "done") {
+                setLoadingStream(false);
+                // Clear form for a fresh start each time
+                setQuestionInputs("");
+                setConditionInputs("");
+              }
+            } catch (e) {
+              console.warn("Bad line", line);
+            }
+        }
+      }
+    } catch (err) {
+      if ((err as any).name !== "AbortError") {
+        alert("Stream failed: " + (err as Error).message);
+      }
+      setLoadingStream(false);
+    }
+  }
+
+  function abortStream() {
+    abortRef.current?.abort();
+    setLoadingStream(false);
+  }
+
+  return (
+    <div className="min-h-screen p-6 space-y-8 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-semibold">Forgent Checklist Tester</h1>
+      <section className="space-y-4">
+        <h2 className="text-lg font-medium">1. Dokumente hochladen (optional)</h2>
+        <form onSubmit={handleUpload} className="flex flex-col gap-2 md:flex-row md:items-center">
+          <input name="files" type="file" multiple className="border p-2 rounded" />
+          <button disabled={uploading} className="bg-blue-600 text-white px-4 py-2 rounded disabled:opacity-50">{uploading ? "Uploading..." : "Upload"}</button>
+        </form>
+        <p className="text-xs text-gray-500">Beim Anfragen werden automatisch alle bisher gespeicherten Dateien berücksichtigt (nicht gelistet).</p>
+      </section>
+
+      <section className="space-y-4">
+        <h2 className="text-lg font-medium">2. Fragen & Bedingungen</h2>
+        <form onSubmit={handleAsk} className="space-y-4">
+          <div className="grid md:grid-cols-2 gap-4">
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium">Fragen (eine pro Zeile)</label>
+              <textarea value={questionInputs} onChange={e => setQuestionInputs(e.target.value)} rows={6} className="border rounded p-2 font-mono text-sm" placeholder="In welcher Form sind die Angebote einzureichen?" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-sm font-medium">Bedingungen (eine pro Zeile)</label>
+              <textarea value={conditionInputs} onChange={e => setConditionInputs(e.target.value)} rows={6} className="border rounded p-2 font-mono text-sm" placeholder="Ist die Abgabefrist vor dem 31.12.2025?" />
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <button type="submit" disabled={loadingStream} className="bg-green-600 text-white px-4 py-2 rounded disabled:opacity-50">{loadingStream ? 'Läuft...' : 'Anfragen'}</button>
+            {loadingStream && <button type="button" onClick={abortStream} className="px-4 py-2 rounded border">Abbrechen</button>}
+          </div>
+        </form>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-medium">3. Ergebnisse</h2>
+        <div className="border rounded p-3 space-y-2 max-h-96 overflow-auto bg-gray-50">
+          {streamItems.map((item, i) => (
+            <div key={i} className="text-sm border-b pb-2 last:border-none">
+              {item.type === 'question_result' && (
+                <div>
+                  <div className="font-semibold">Frage: {item.question}</div>
+                  <div className="mt-1">Antwort: <span className="font-medium">{item.answer}</span></div>
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-xs text-gray-600">Raw JSON</summary>
+                    <pre className="text-xs whitespace-pre-wrap break-words">{item.raw}</pre>
+                  </details>
+                </div>
+              )}
+              {item.type === 'condition_result' && (
+                <div>
+                  <div className="font-semibold">Bedingung: {item.condition}</div>
+                  <div className="mt-1">Result: <span className={`font-medium ${item.result ? 'text-green-600' : 'text-red-600'}`}>{String(item.result)}</span></div>
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-xs text-gray-600">Raw JSON</summary>
+                    <pre className="text-xs whitespace-pre-wrap break-words">{item.raw}</pre>
+                  </details>
+                </div>
+              )}
+              {item.type === 'done' && (
+                <div className="text-center text-xs text-gray-500">Fertig.</div>
+              )}
+            </div>
+          ))}
+          {streamItems.length === 0 && !loadingStream && (
+            <p className="text-xs text-gray-500">Noch keine Ergebnisse.</p>
+          )}
+          {loadingStream && <p className="text-xs animate-pulse">Streaming...</p>}
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </section>
+      <footer className="pt-4 text-center text-xs text-gray-400">Backend: {API_BASE}</footer>
     </div>
   );
 }

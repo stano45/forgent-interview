@@ -1,7 +1,8 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from typing import List, AsyncGenerator
-import json, asyncio
+import json, asyncio, os
 
 from config import load_config
 from anthropic_client import AnthropicClient
@@ -14,6 +15,23 @@ from prompts import (
 from database import insert_file, get_file_paths, fetch_all_files, get_file_paths_by_ids
 
 app = FastAPI(title="Forgent Checklist API", version="0.1.0")
+
+# Allow local frontend dev (Next.js on port 3000). Can override with comma separated ALLOWED_ORIGINS env.
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins_env:
+    allowed_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+else:
+    allowed_origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/upload")
 async def upload(files: List[UploadFile] = File(...)):
