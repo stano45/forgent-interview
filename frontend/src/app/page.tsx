@@ -435,27 +435,53 @@ export default function Home() {
             </CardContent>
           </Card>
 
-          <Card id="interaction" className="sticky bottom-4 pl-0 sm:pl-8 shadow-lg">
+          <Card id="interaction" className={cn(
+              "sticky bottom-4 pl-0 sm:pl-8 shadow-lg transition-colors",
+              loadingStream && "border-primary/50"
+            )}>
             <CardHeader className="pb-2">
               <div className="flex items-center gap-3">
-                <div className="hidden sm:flex h-7 w-7 items-center justify-center rounded-full border bg-background text-xs">4</div>
+                <div className={cn(
+                  "hidden sm:flex h-7 w-7 items-center justify-center rounded-full border text-xs transition-colors",
+                  loadingStream ? "bg-primary/10 border-primary text-primary" : "bg-background"
+                )}>
+                  {loadingStream ? (
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" 
+                        stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                        className="animate-pulse">
+                      <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path>
+                      <path d="M12 9v4"></path>
+                      <path d="M12 17h.01"></path>
+                    </svg>
+                  ) : "4"}
+                </div>
                 <div>
-                  <CardTitle>Dokumente auswerten</CardTitle>
-                  <CardDescription>KI-gestützte Analyse durchführen</CardDescription>
+                  <CardTitle>
+                    {loadingStream ? "Analyse läuft" : "Dokumente auswerten"}
+                  </CardTitle>
+                  <CardDescription>
+                    {loadingStream ? "Bitte warten Sie, während Ihre Dokumente analysiert werden" : "KI-gestützte Analyse durchführen"}
+                  </CardDescription>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
-              <form id="ask-form" onSubmit={handleAsk} className="flex flex-wrap gap-3">
+              <form id="ask-form" onSubmit={handleAsk} className="flex flex-wrap gap-3 items-center">
                 {!loadingStream ? (
                   <Button type="submit" disabled={loadingStream} className="min-w-40">
                     Dokumente auswerten
                   </Button>
                 ) : (
                   <>
-                    <Button type="button" variant="outline" onClick={abortStream} className="min-w-40">
-                      Analyse abbrechen
-                    </Button>
+                    <div className="flex items-center gap-3">
+                      <Button type="button" variant="outline" onClick={abortStream} className="min-w-40">
+                        Analyse abbrechen
+                      </Button>
+                      <div className="flex items-center gap-2">
+                        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+                        <span className="text-sm">Dokumente werden analysiert...</span>
+                      </div>
+                    </div>
                   </>
                 )}
                 {Object.keys(questionStatuses).length > 0 && !loadingStream && (
