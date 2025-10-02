@@ -214,3 +214,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+api/uploaded_files
+*.db
+*.db-shm
+*.db-wal
