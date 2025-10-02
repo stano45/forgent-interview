@@ -1,8 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import StreamingResponse
 from typing import List, AsyncGenerator
-import tempfile, json, asyncio
-from pathlib import Path
+import json, asyncio
 
 from config import load_config
 from anthropic_client import AnthropicClient
@@ -32,16 +31,33 @@ async def ask(payload: dict):
     """Submit questions/conditions and stream structured JSONL results.
 
     Request body example:
-    {"questions": ["..."], "conditions": ["..."], "file_ids": ["uuid1", "uuid2"]}
+    {
+        "questions": [
+            {"id": "q1", "text": "What is...?"},
+            {"id": "q2", "text": "How to...?"}
+        ],
+        "conditions": [
+            {"id": "c1", "text": "Is the deadline before...?"},
+            {"id": "c2", "text": "Are electronic submissions allowed?"}
+        ],
+        "file_ids": ["uuid1", "uuid2"]
+    }
     """
-    questions: List[str] = payload.get("questions") or []
-    conditions: List[str] = payload.get("conditions") or []
+    questions: List[dict] = payload.get("questions") or []
+    conditions: List[dict] = payload.get("conditions") or []
     file_ids: List[str] = payload.get("file_ids") or []
+    
+    for q in questions:
+        if not isinstance(q, dict) or "id" not in q or "text" not in q:
+            raise HTTPException(status_code=400, detail="Each question must have 'id' and 'text' fields")
+    
+    for c in conditions:
+        if not isinstance(c, dict) or "id" not in c or "text" not in c:
+            raise HTTPException(status_code=400, detail="Each condition must have 'id' and 'text' fields")
     
     if not questions and not conditions:
         raise HTTPException(status_code=400, detail="Provide at least one question or condition")
     
-    # If no file_ids specified, use all files (backward compatibility)
     if not file_ids:
         paths = get_file_paths()
     else:
@@ -60,30 +76,29 @@ async def ask(payload: dict):
     )
 
     async def stream() -> AsyncGenerator[bytes, None]:
-        # Use the paths we already resolved above
         anthropic_file_ids = client.upload_files(paths)
-        # Questions
         for q in questions:
-            prompt = build_question_prompt(q) + "\nNur das JSON Objekt. Keine Erklärungen, KEINE Backticks."
+            prompt = build_question_prompt(q["text"]) + "\nNur das JSON Objekt. Keine Erklärungen, KEINE Backticks."
             res = client.ask_with_files([{"text": prompt}], anthropic_file_ids)
             raw_txt = extract_text_blocks(res)
             answer = parse_question_answer(raw_txt)
             yield json.dumps({
                 "type": "question_result",
-                "question": q,
+                "id": q["id"],
+                "question": q["text"],
                 "answer": answer,
                 "raw": raw_txt,
             }, ensure_ascii=False).encode() + b"\n"
             await asyncio.sleep(0)
-        # Conditions
         for c in conditions:
-            prompt = build_condition_prompt(c) + "\nNur das JSON Objekt. Keine Erklärungen, KEINE Backticks."
+            prompt = build_condition_prompt(c["text"]) + "\nNur das JSON Objekt. Keine Erklärungen, KEINE Backticks."
             res = client.ask_with_files([{"text": prompt}], anthropic_file_ids)
             raw_txt = extract_text_blocks(res)
             result = parse_condition_answer(raw_txt)
             yield json.dumps({
                 "type": "condition_result",
-                "condition": c,
+                "id": c["id"],
+                "condition": c["text"],
                 "result": result,
                 "raw": raw_txt,
             }, ensure_ascii=False).encode() + b"\n"
@@ -92,7 +107,6 @@ async def ask(payload: dict):
 
     return StreamingResponse(stream(), media_type="application/jsonl")
 
-# Utility replicate from CLI script
 def extract_text_blocks(msg) -> str:
     raw = "\n".join([
         (getattr(blk, "text", None).text if hasattr(getattr(blk, "text", None), "text") else getattr(blk, "text", None))
