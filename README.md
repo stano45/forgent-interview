@@ -11,12 +11,16 @@ You need:
 
 Environment variables (minimal – must match `api/config.py`):
 ```
-ANTHROPIC_API_KEY=your-key-here          # Required
-ANTHROPIC_MODEL=claude-3-5-sonnet-latest # Model name
-ANTHROPIC_MAX_TOKENS=1024                # Max output tokens per response
-ANTHROPIC_TEMP=0                         # Sampling temperature
+ANTHROPIC_API_KEY=sk-ant-api03-XXXXXXXXXXXX # Required  
+ANTHROPIC_MODEL=claude-sonnet-4-5-20250929  # Model name - claude-sonnet-4-5-20250929 strongly recommended for best results
+ANTHROPIC_MAX_TOKENS=10000                  # Max output tokens per response  
+ANTHROPIC_TEMP=0.0                          # Sampling temperature  
 ```
-You can place these in an `.env` file at repo root (Docker Compose automatically loads it) or export them in your shell.
+To get started quickly, copy the example file and edit it:
+```bash
+cp api/.env.example api/.env
+# Then edit api/.env to add your Anthropic API key and adjust settings if needed
+```
 
 ---
 ## 2. Run (one command)
@@ -25,19 +29,12 @@ Build and start both backend (FastAPI) and frontend (Next.js):
 docker compose up --build
 ```
 First build can take a minute. Subsequent runs can omit `--build`.
-
-When containers are healthy:
-* Frontend UI: http://localhost:3000
-* Backend API (direct): http://localhost:8000/docs (Swagger UI)
-
 ---
 ## 3. Use the App
 1. Open http://localhost:3000
 2. Upload one or more PDF files
 3. Enter questions and optional conditions
 4. Submit and view streamed responses
-
-The backend streams JSONL chunks; the UI progressively renders them.
 
 ---
 ## 4. Project Structure (high level)
