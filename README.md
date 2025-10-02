@@ -7,7 +7,8 @@ Full‑stack demo for document Q&A: a FastAPI backend that ingests PDF files and
 You need:
 1. Docker (https://docs.docker.com/get-docker/)
 2. Docker Compose (comes bundled with modern Docker Desktop)
-3. An Anthropic API key (set as an environment variable before starting or inject via Docker)
+3. Node.js and npm (https://nodejs.org/) – required for running the frontend locally
+4. An Anthropic API key (set as an environment variable before starting or inject via Docker)
 
 Environment variables (minimal – must match `api/config.py`):
 ```
@@ -27,8 +28,10 @@ cp api/.env.example api/.env
 Build and start both backend (FastAPI) and frontend (Next.js):
 ```bash
 docker compose up --build
+# in a second terminal
+cd frontend && npm i && npm run dev
+
 ```
-First build can take a minute. Subsequent runs can omit `--build`.
 ---
 ## 3. Use the App
 1. Open http://localhost:3000
